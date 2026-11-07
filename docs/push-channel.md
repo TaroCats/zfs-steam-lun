@@ -1,3 +1,14 @@
+---
+AIGC:
+    Label: "1"
+    ContentProducer: 001191440300708461136T1XGW3
+    ProduceID: 0b45cb7c70da02cc2552e8764ddb8c35_ac72174ddac211f19232525400248c00
+    ReservedCode1: O/ZMSeR0Jm6VzwyT70o/lGR823O0tpQXyhjsxr9aytlqfr0wAXNQ+HkCDv0J5U7VsVfP/VbdqZSXyGzhXxcgKZToOIIQ+D3XCTtXWtu1tdOGJTJix8S3nbtRbtE+BvurREzLVTLw1x3FqLl9XkGwOkfKya8PWIxiuMXCOQClINUyumRgV7yYaupEcnk=
+    ContentPropagator: 001191440300708461136T1XGW3
+    PropagateID: 0b45cb7c70da02cc2552e8764ddb8c35_ac72174ddac211f19232525400248c00
+    ReservedCode2: O/ZMSeR0Jm6VzwyT70o/lGR823O0tpQXyhjsxr9aytlqfr0wAXNQ+HkCDv0J5U7VsVfP/VbdqZSXyGzhXxcgKZToOIIQ+D3XCTtXWtu1tdOGJTJix8S3nbtRbtE+BvurREzLVTLw1x3FqLl9XkGwOkfKya8PWIxiuMXCOQClINUyumRgV7yYaupEcnk=
+---
+
 # 推送通道：NAS → Mac(1Password SSH agent) → GitHub
 
 本仓库在 NAS 上开发，NAS 本身不持有 GitHub 私钥。所有 `git push` 通过 Mac 上的
@@ -64,3 +75,4 @@ git push origin main'
 - 工作流：`.github/workflows/build.yml`（matrix amd64/arm64 → push-by-digest → imagetools 合并）
 - 镜像：`ghcr.io/tarocats/zfs-steam-lun`，tag `edge` / `sha-<短SHA>` / `vX.Y.Z` / `latest`
 - 运行记录：run 42387711303 成功，OCI index 含 `linux/amd64`、`linux/arm64` 及 provenance/SBOM
+*（内容由AI生成，仅供参考）*

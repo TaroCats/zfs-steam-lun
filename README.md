@@ -104,12 +104,24 @@ docker logs zfs-steam-lun | head -20     # 首次启动打印令牌
 
 ### 4.5 访问
 
-浏览器打开 `http://<NAS-IP>:8890`，输入令牌。
+浏览器打开 `http://<NAS-IP>:8890`，**默认可直接进入，无需登录令牌**。
 
-令牌来源优先级：
+访问令牌由 `APP_AUTH` 控制：
+
+| 配置 | 行为 |
+|---|---|
+| `APP_AUTH=off`（默认） | 不校验令牌，前端自动跳过登录页，`/api/session` 返回 `auth: false` |
+| `APP_AUTH=on` | 需要令牌，前端 401 时弹出登录框 |
+
+开启认证后，令牌来源优先级：
 1. `docker-compose.yml` 里的 `APP_TOKEN`
 2. 自动生成并写入 `./data/token.txt`
 3. 首次启动日志里打印
+
+需要临时开启：`ZSL_AUTH=on docker compose up -d`。
+
+> 控制台能删除客户端 LUN、回滚快照，属于破坏性操作。默认免登录适用于可信内网；
+> 若 NAS 的 8890 端口暴露到公网或不可信网段，建议 `ZSL_AUTH=on` 并配合反向代理鉴权。
 
 ---
 

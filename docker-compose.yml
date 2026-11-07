@@ -7,7 +7,7 @@ services:
       dockerfile: Dockerfile
     # 默认本地构建；想直接用 GitHub Actions 分发出来的镜像时：
     #   ZSL_IMAGE=ghcr.io/tarocats/zfs-steam-lun:latest docker compose up -d
-    image: ${ZSL_IMAGE:-zfs-steam-lun:1.0.1}
+    image: ${ZSL_IMAGE:-zfs-steam-lun:1.1.0}
     container_name: zfs-steam-lun
     restart: unless-stopped
     # 需要进入宿主命名空间调用 zfs / targetcli，并直接操作内核 configfs
@@ -18,7 +18,9 @@ services:
     environment:
       TZ: Asia/Shanghai
       APP_PORT: "8890"
-      # 想固定令牌就取消下一行注释；不设则自动生成到 data/token.txt
+      # 访问令牌开关：off（默认）= 局域网直连免登录；on = 需要令牌
+      APP_AUTH: "${ZSL_AUTH:-off}"
+      # 开启认证后想固定令牌就取消下一行注释；不设则自动生成到 data/token.txt
       # APP_TOKEN: "change-me-please"
     volumes:
       # LIO 内核配置接口（用于读取 LUN / ACL / 会话状态）

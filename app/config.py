@@ -16,7 +16,7 @@ DB_PATH = DATA_DIR / "app.db"
 TOKEN_FILE = DATA_DIR / "token.txt"
 
 PORT = int(os.environ.get("APP_PORT", "8890"))
-APP_VERSION = "1.0.1"
+APP_VERSION = "1.1.0"
 
 # 新建 target 的 IQN 前缀（不含实例名）
 DEFAULT_IQN_PREFIX = os.environ.get("IQN_PREFIX", "iqn.2026-11.com.fylun")
@@ -47,4 +47,7 @@ def load_token() -> str:
     return t
 
 
-APP_TOKEN = load_token()
+# 访问令牌开关：默认关闭（局域网直连即可用），需要时用 APP_AUTH=on 打开
+_AUTH_RAW = os.environ.get("APP_AUTH", "off").strip().lower()
+AUTH_ENABLED = _AUTH_RAW not in ("0", "off", "false", "no", "disable", "disabled")
+APP_TOKEN = load_token() if AUTH_ENABLED else ""

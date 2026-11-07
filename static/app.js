@@ -520,6 +520,10 @@ function bindSettings() {
   const tk = $('#do-token');
   if (tk) tk.onclick = () => guard(async () => {
     const t = await api('/api/token-hint');
+    if (t.auth === false) {
+      modal({ title: '访问令牌', body: `<div class="hint">${esc(t.message || '访问令牌已关闭')}。控制台当前无需登录，直接使用即可。</div>` });
+      return;
+    }
     modal({ title: '访问令牌', body: `<div class="hint">完整令牌见容器内 <span class="mono">/data/token.txt</span>，或 <span class="mono">docker logs zfs-steam-lun | head</span>。</div>
       <div class="code" style="margin-top:10px">${esc(t.hint)}</div>` });
   }, tk, '读取');
@@ -895,6 +899,23 @@ window.addEventListener('hashchange', () => {
 
 /* 启动 */
 (async function boot() {
+  // 先探测服务端是否需要令牌：APP_AUTH=off 时直接进主界面
+  let meta = null;
+  try {
+    const r = await fetch('/api/session');
+    if (r.ok) meta = await r.json();
+  } catch (_) { /* 探测失败则按需登录处理 */ }
+
+  const logoutBtn = $('#logout');
+  if (meta && meta.auth === false) {
+    S.token = '';
+    localStorage.removeItem('zsl_token');
+    if (logoutBtn) logoutBtn.hidden = true;
+    showApp();
+    return;
+  }
+  if (logoutBtn) logoutBtn.hidden = false;
+
   if (!S.token) { showLogin(); return; }
   try {
     await api('/api/health');

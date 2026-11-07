@@ -27,10 +27,14 @@ IP="$(hostname -I 2>/dev/null | awk '{print $1}')"
 echo
 echo "==================================================="
 echo " 控制台: http://${IP:-<NAS-IP>}:8890"
-if [ -f "$DST/data/token.txt" ]; then
-  echo " 访问令牌: $(cat "$DST/data/token.txt")"
+if [ "${ZSL_AUTH:-off}" = "on" ]; then
+  if [ -f "$DST/data/token.txt" ]; then
+    echo " 访问令牌: $(cat "$DST/data/token.txt")"
+  else
+    echo " 访问令牌: docker logs zfs-steam-lun | head -5"
+  fi
 else
-  echo " 访问令牌: docker logs zfs-steam-lun | head -5"
+  echo " 访问方式: 直接打开即可（未启用令牌，APP_AUTH=off）"
 fi
 echo "==================================================="
 echo
