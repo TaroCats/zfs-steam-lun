@@ -7,7 +7,8 @@ services:
       dockerfile: Dockerfile
     # 默认本地构建；想直接用 GitHub Actions 分发出来的镜像时：
     #   ZSL_IMAGE=ghcr.io/tarocats/zfs-steam-lun:latest docker compose up -d
-    image: ${ZSL_IMAGE:-zfs-steam-lun:1.1.0}
+    # 控制台无登录，请勿把 8890 直接暴露到公网。
+    image: ${ZSL_IMAGE:-zfs-steam-lun:1.2.0}
     container_name: zfs-steam-lun
     restart: unless-stopped
     # 需要进入宿主命名空间调用 zfs / targetcli，并直接操作内核 configfs
@@ -18,16 +19,12 @@ services:
     environment:
       TZ: Asia/Shanghai
       APP_PORT: "8890"
-      # 访问令牌开关：off（默认）= 局域网直连免登录；on = 需要令牌
-      APP_AUTH: "${ZSL_AUTH:-off}"
-      # 开启认证后想固定令牌就取消下一行注释；不设则自动生成到 data/token.txt
-      # APP_TOKEN: "change-me-please"
     volumes:
       # LIO 内核配置接口（用于读取 LUN / ACL / 会话状态）
       - /sys/kernel/config:/sys/kernel/config:rshared
       # /dev/zfs 与 /dev/zvol/*
       - /dev:/dev:rshared
-      # 应用数据（sqlite、token）
+      # 应用数据（sqlite）
       - ./data:/data
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8890/api/health', timeout=3)"]

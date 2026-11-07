@@ -4,30 +4,13 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>ZFS Steam LUN · 母版克隆与 iSCSI 管理</title>
-<link rel="stylesheet" href="/assets/style.css" />
+<link rel="stylesheet" href="/assets/style.css?v=1.2.0" />
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%234ea1ff'/><text x='16' y='22' font-size='16' text-anchor='middle' fill='%23061018' font-family='sans-serif' font-weight='bold'>Z</text></svg>" />
 </head>
 <body>
 
-<!-- 登录 -->
-<div id="login" class="login-wrap" hidden>
-  <form class="login-card" id="login-form">
-    <div class="login-logo"><span class="logo-mark">Z</span> ZFS Steam LUN</div>
-    <div class="login-sub">
-      母版卷 → 快照 → 克隆 → 独立 iSCSI LUN。<br />
-      仅在设置了 <span class="mono">APP_AUTH=on</span> 时需要令牌（见容器内 <span class="mono">/data/token.txt</span>）。
-    </div>
-    <div class="field">
-      <label for="token">访问令牌</label>
-      <input id="token" type="password" placeholder="粘贴令牌" autocomplete="current-password" />
-    </div>
-    <button class="btn primary" type="submit" style="width:100%;justify-content:center;padding:10px">进入控制台</button>
-    <div class="hint" id="login-msg"></div>
-  </form>
-</div>
-
 <!-- 主界面 -->
-<div class="shell" id="shell" hidden>
+<div class="shell" id="shell">
   <aside class="sidebar">
     <div class="brand">
       <span class="logo-mark">Z</span>
@@ -59,8 +42,7 @@
       设置
     </div>
     <div class="sidebar-foot">
-      <div id="foot-ver">v1.0.0</div>
-      <div style="margin-top:6px;cursor:pointer" id="logout">退出登录</div>
+      <div id="foot-ver">v1.2.0</div>
     </div>
   </aside>
 
@@ -78,6 +60,6 @@
 <div class="toasts" id="toasts"></div>
 <div id="modal-root"></div>
 
-<script src="/assets/app.js"></script>
+<script src="/assets/app.js?v=1.2.0"></script>
 </body>
 </html>

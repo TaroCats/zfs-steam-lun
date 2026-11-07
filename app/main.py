@@ -4,19 +4,17 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from fastapi import FastAPI, Header, HTTPException, Request
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from . import db, lio, service, zfs
-from .config import APP_TOKEN, APP_VERSION, AUTH_ENABLED
+from .config import APP_VERSION
 
 app = FastAPI(title="ZFS Steam LUN", version=APP_VERSION, docs_url=None, redoc_url=None)
 
 STATIC_DIR = Path("/app/static")
-
-PUBLIC_PATHS = {"/api/health", "/api/login", "/api/session"}
 
 
 @app.on_event("startup")
@@ -28,26 +26,19 @@ def _startup() -> None:
         db.set_setting("instance", s["instance"])
         db.set_setting("portal", s["portal"])
         db.set_setting("portal_port", s["portal_port"])
-    if AUTH_ENABLED:
-        # 首次启动把 token 打到日志，方便查看
-        if not os.environ.get("APP_TOKEN"):
-            print(f"[init] Web 访问令牌: {APP_TOKEN}", flush=True)
-    else:
-        print("[init] 访问令牌已关闭（APP_AUTH=off），控制台无需登录", flush=True)
+    print(f"[init] ZFS Steam LUN v{APP_VERSION} 启动完成，控制台无需登录", flush=True)
 
 
 @app.middleware("http")
-async def auth_middleware(request: Request, call_next):
+async def no_cache_middleware(request: Request, call_next):
+    """静态资源禁用浏览器缓存，避免升级后仍加载旧版前端。"""
+    resp = await call_next(request)
     path = request.url.path
-    if AUTH_ENABLED and path.startswith("/api/") and path not in PUBLIC_PATHS:
-        token = request.headers.get("x-api-token", "")
-        if not token:
-            auth = request.headers.get("authorization", "")
-            if auth.lower().startswith("bearer "):
-                token = auth[7:]
-        if token != APP_TOKEN:
-            return JSONResponse({"detail": "未授权，请先输入访问令牌"}, status_code=401)
-    return await call_next(request)
+    if path == "/" or path.endswith(".html"):
+        resp.headers["Cache-Control"] = "no-store, max-age=0"
+    elif path.startswith("/assets/"):
+        resp.headers["Cache-Control"] = "no-cache, must-revalidate"
+    return resp
 
 
 def _err(e: Exception) -> HTTPException:
@@ -58,25 +49,6 @@ def _err(e: Exception) -> HTTPException:
 @app.get("/api/health")
 def health():
     return {"ok": True, "version": APP_VERSION}
-
-
-@app.get("/api/session")
-def session():
-    """前端启动探测：是否需要登录令牌。"""
-    return {"ok": True, "auth": AUTH_ENABLED, "version": APP_VERSION}
-
-
-class LoginIn(BaseModel):
-    token: str
-
-
-@app.post("/api/login")
-def login(body: LoginIn):
-    if not AUTH_ENABLED:
-        return {"ok": True, "auth": False}
-    if body.token != APP_TOKEN:
-        raise HTTPException(status_code=401, detail="令牌不正确")
-    return {"ok": True, "auth": True}
 
 
 @app.get("/api/overview")
@@ -322,13 +294,6 @@ def gen_chap():
     return {"password": service.gen_chap_pass()}
 
 
-@app.get("/api/token-hint")
-def token_hint():
-    if not AUTH_ENABLED:
-        return {"auth": False, "hint": "", "message": "访问令牌已关闭，无需登录"}
-    return {"auth": True, "hint": APP_TOKEN[:4] + "****" if APP_TOKEN else ""}
-
-
 # ---------------------------------------------------------------- 静态
 app.mount("/assets", StaticFiles(directory=str(STATIC_DIR)), name="assets")
 
@@ -340,6 +305,8 @@ def index():
 
 @app.get("/{full_path:path}")
 def spa(full_path: str):
+    if full_path == "api" or full_path.startswith("api/"):
+        raise HTTPException(status_code=404, detail="接口不存在")
     f = STATIC_DIR / full_path
     if f.is_file():
         return FileResponse(f)

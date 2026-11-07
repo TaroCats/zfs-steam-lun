@@ -2,21 +2,21 @@
 
 所有可调项都可在容器环境变量或 Web 设置页中修改；
 设置页写入的值存进 sqlite 的 settings 表，优先级高于环境变量默认值。
+
+控制台不需要任何登录凭证（无令牌机制），请仅在可信内网中暴露 8890 端口。
 """
 from __future__ import annotations
 
 import os
-import secrets
 from pathlib import Path
 
 DATA_DIR = Path(os.environ.get("APP_DATA", "/data"))
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 DB_PATH = DATA_DIR / "app.db"
-TOKEN_FILE = DATA_DIR / "token.txt"
 
 PORT = int(os.environ.get("APP_PORT", "8890"))
-APP_VERSION = "1.1.0"
+APP_VERSION = "1.2.0"
 
 # 新建 target 的 IQN 前缀（不含实例名）
 DEFAULT_IQN_PREFIX = os.environ.get("IQN_PREFIX", "iqn.2026-11.com.fylun")
@@ -30,24 +30,3 @@ DEFAULT_PORTAL_PORT = 3260
 DEFAULT_VOLBLOCKSIZE = "16K"
 DEFAULT_COMPRESSION = "lz4"
 DEFAULT_SYNC = "standard"
-
-
-def load_token() -> str:
-    """优先环境变量，其次 /data/token.txt，都没有就生成一个并落盘。"""
-    env = os.environ.get("APP_TOKEN", "").strip()
-    if env:
-        return env
-    if TOKEN_FILE.exists():
-        t = TOKEN_FILE.read_text(encoding="utf-8").strip()
-        if t:
-            return t
-    t = secrets.token_urlsafe(24)
-    TOKEN_FILE.write_text(t, encoding="utf-8")
-    TOKEN_FILE.chmod(0o600)
-    return t
-
-
-# 访问令牌开关：默认关闭（局域网直连即可用），需要时用 APP_AUTH=on 打开
-_AUTH_RAW = os.environ.get("APP_AUTH", "off").strip().lower()
-AUTH_ENABLED = _AUTH_RAW not in ("0", "off", "false", "no", "disable", "disabled")
-APP_TOKEN = load_token() if AUTH_ENABLED else ""

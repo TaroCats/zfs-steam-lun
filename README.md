@@ -74,7 +74,7 @@ bash install.sh
 bash install.sh /vol2/1000/Docker/zfs-steam-lun
 ```
 
-脚本会：复制文件 → `docker compose build` → `up -d` → 等健康检查 → 打印访问地址与令牌。
+脚本会：复制文件 → `docker compose build` → `up -d` → 等健康检查 → 打印访问地址。
 
 ### 4.3 手工部署
 
@@ -84,7 +84,7 @@ cp -a Dockerfile docker-compose.yml requirements.txt app static /vol2/1000/Docke
 cd /vol2/1000/Docker/zfs-steam-lun
 mkdir -p data
 docker compose up -d --build
-docker logs zfs-steam-lun | head -20     # 首次启动会打印访问令牌
+docker logs zfs-steam-lun | head -20     # 查看启动日志
 ```
 
 ### 4.4 从现成镜像部署（不构建）
@@ -97,31 +97,23 @@ mkdir -p /vol2/1000/Docker/zfs-steam-lun && cd /vol2/1000/Docker/zfs-steam-lun
 curl -fsSLO https://raw.githubusercontent.com/TaroCats/zfs-steam-lun/main/docker-compose.yml
 mkdir -p data
 ZSL_IMAGE=ghcr.io/tarocats/zfs-steam-lun:latest docker compose up -d
-docker logs zfs-steam-lun | head -20     # 首次启动打印令牌
+docker logs zfs-steam-lun | head -20     # 查看启动日志
 ```
 
 私有镜像需先 `echo <PAT> | docker login ghcr.io -u <用户名> --password-stdin`。
 
 ### 4.5 访问
 
-浏览器打开 `http://<NAS-IP>:8890`，**默认可直接进入，无需登录令牌**。
+浏览器打开 `http://<NAS-IP>:8890`，直接进入控制台 —— **本应用没有任何登录/令牌机制**，
+后端不校验任何凭证，前端也没有登录页。
 
-访问令牌由 `APP_AUTH` 控制：
+> ⚠️ 因为无鉴权，控制台能删除 LUN、回滚快照，属于破坏性操作。
+> **不要**把 8890 端口映射到公网；必须远程访问时，请在前面套反向代理并加上 HTTP 认证。
 
-| 配置 | 行为 |
-|---|---|
-| `APP_AUTH=off`（默认） | 不校验令牌，前端自动跳过登录页，`/api/session` 返回 `auth: false` |
-| `APP_AUTH=on` | 需要令牌，前端 401 时弹出登录框 |
+### 4.6 前端缓存
 
-开启认证后，令牌来源优先级：
-1. `docker-compose.yml` 里的 `APP_TOKEN`
-2. 自动生成并写入 `./data/token.txt`
-3. 首次启动日志里打印
-
-需要临时开启：`ZSL_AUTH=on docker compose up -d`。
-
-> 控制台能删除客户端 LUN、回滚快照，属于破坏性操作。默认免登录适用于可信内网；
-> 若 NAS 的 8890 端口暴露到公网或不可信网段，建议 `ZSL_AUTH=on` 并配合反向代理鉴权。
+静态资源响应头带 `Cache-Control: no-cache, must-revalidate`，`index.html` 为 `no-store`，
+且 HTML 里以 `?v=<版本>` 引用 `app.js` / `style.css`，升级后浏览器不会继续使用旧版前端。
 
 ---
 
@@ -166,7 +158,6 @@ docker logs zfs-steam-lun | head -20     # 首次启动打印令牌
 | `<池>/<数据集>/masters/<名>@<快照>` | 快照 |
 | `<池>/<数据集>/clients/<名>` | 客户端克隆 zvol（origin 指向母版快照） |
 | `./data/app.db` | 客户端元数据（IQN、CHAP、备注）、设置、操作日志 |
-| `./data/token.txt` | 访问令牌 |
 | `/etc/target/saveconfig.json` | 宿主 target 持久化配置 |
 
 ZFS 侧建议参数（应用默认已带）：`volblocksize=16K`、`compression=lz4`、`sync=standard`。
@@ -187,7 +178,7 @@ ZFS 侧建议参数（应用默认已带）：`volblocksize=16K`、`compression=
 
 ## 8. API 速查
 
-所有接口需带 `X-API-Token` 头（`/api/health`、`/api/login` 除外）。
+所有接口均无需任何认证头（应用不校验凭证）。
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
@@ -291,5 +282,7 @@ arm64 runner 说明：默认用 QEMU 模拟以兼容任意仓库；若仓库可�
 
 ## 12. 版本
 
+- 1.2.0 — 彻底移除访问令牌机制（删除 `APP_AUTH` / `APP_TOKEN` / `/api/session` / `/api/login` / `/api/token-hint` 与前端登录页）；静态资源改为禁缓存 + 版本指纹，修复升级后浏览器仍加载旧前端导致的“仍要求输入令牌”问题。
+- 1.1.0 — 访问令牌默认关闭（`APP_AUTH=off`），前端启动探测 `/api/session` 自动免登录。该机制已在 1.2.0 中删除。
 - 1.0.1 — 修复：父数据集重复创建、`sparse` 选项不兼容、扫描时 `short` 取值错误、targetcli TPG 路径别名、block backstore 路径探测（`core/iblock_<n>`）、卷 busy 重试与回滚错误掩盖。已在 fnOS（ZFS 2.4.1 + 内核 6.18）用临时文件池跑通全链路自测。同时补齐 GitHub Actions 矩阵构建与 GHCR 分发、compose 支持 `ZSL_IMAGE` 变量。
 - 1.0.0 — 首个版本：母版/快照/克隆/映射/CHAP/扩容/重建/日志/自检

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 一键部署：把项目复制到 Docker 目录并启动，打印访问地址与令牌。
+# 一键部署：把项目复制到 Docker 目录并启动，打印访问地址。
 set -euo pipefail
 
 SRC="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -27,15 +27,7 @@ IP="$(hostname -I 2>/dev/null | awk '{print $1}')"
 echo
 echo "==================================================="
 echo " 控制台: http://${IP:-<NAS-IP>}:8890"
-if [ "${ZSL_AUTH:-off}" = "on" ]; then
-  if [ -f "$DST/data/token.txt" ]; then
-    echo " 访问令牌: $(cat "$DST/data/token.txt")"
-  else
-    echo " 访问令牌: docker logs zfs-steam-lun | head -5"
-  fi
-else
-  echo " 访问方式: 直接打开即可（未启用令牌，APP_AUTH=off）"
-fi
+echo " 访问方式: 直接打开即可（控制台无登录凭证）"
 echo "==================================================="
 echo
 echo "首次使用：进入「设置」选择存储池 → 创建母版 → 打快照 → 新增客户端。"

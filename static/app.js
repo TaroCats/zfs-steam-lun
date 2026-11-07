@@ -2,7 +2,6 @@
 'use strict';
 
 const S = {
-  token: localStorage.getItem('zsl_token') || '',
   view: 'overview',
   overview: null,
   scan: null,
@@ -55,16 +54,11 @@ async function api(path, opts = {}) {
     method: opts.method || 'GET',
     headers: {
       'Content-Type': 'application/json',
-      'X-API-Token': S.token,
     },
     body: opts.body ? JSON.stringify(opts.body) : undefined,
   });
   let data = null;
   try { data = await res.json(); } catch (_) { /* ignore */ }
-  if (res.status === 401) {
-    showLogin('令牌已失效，请重新输入');
-    throw new Error('未授权');
-  }
   if (!res.ok) {
     const msg = (data && (data.detail || data.message)) || ('请求失败 (' + res.status + ')');
     throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
@@ -457,7 +451,6 @@ function viewSettings() {
     <div class="card-head"><h3>维护</h3></div>
     <div class="card-body" style="display:flex;gap:10px;flex-wrap:wrap">
       <button class="btn" id="do-saveconfig">持久化 target 配置</button>
-      <button class="btn ghost" id="do-token">查看令牌提示</button>
       <span class="hint" style="margin:0;align-self:center">持久化会把当前 LUN 拓扑写入 /etc/target/saveconfig.json，供宿主重启后恢复。</span>
     </div>
   </div>`;
@@ -516,17 +509,6 @@ function bindSettings() {
     await api('/api/saveconfig', { method: 'POST' });
     toast('当前 target 配置已持久化');
   }, sc, '写入');
-
-  const tk = $('#do-token');
-  if (tk) tk.onclick = () => guard(async () => {
-    const t = await api('/api/token-hint');
-    if (t.auth === false) {
-      modal({ title: '访问令牌', body: `<div class="hint">${esc(t.message || '访问令牌已关闭')}。控制台当前无需登录，直接使用即可。</div>` });
-      return;
-    }
-    modal({ title: '访问令牌', body: `<div class="hint">完整令牌见容器内 <span class="mono">/data/token.txt</span>，或 <span class="mono">docker logs zfs-steam-lun | head</span>。</div>
-      <div class="code" style="margin-top:10px">${esc(t.hint)}</div>` });
-  }, tk, '读取');
 }
 
 /* ---------------------------------------------------------------- 母版操作 */
@@ -849,45 +831,13 @@ function guideDlg({ name, target, initiator, chap_user, chap_pass, size }) {
   });
 }
 
-/* ---------------------------------------------------------------- 登录 */
-function showLogin(msg = '') {
-  $('#login').hidden = false;
-  $('#shell').hidden = true;
-  $('#login-msg').textContent = msg;
-  setTimeout(() => $('#token').focus(), 60);
-}
-
+/* ---------------------------------------------------------------- 启动 */
 function showApp() {
-  $('#login').hidden = true;
   $('#shell').hidden = false;
   const v = (location.hash || '#overview').slice(1);
   go(TITLES[v] ? v : 'overview');
   loadData().catch((e) => toast(e.message, 'err'));
 }
-
-$('#login-form').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const token = $('#token').value.trim();
-  if (!token) return;
-  const btn = e.target.querySelector('button');
-  busyBtn(btn, true, '验证');
-  try {
-    localStorage.setItem('zsl_token', token);
-    S.token = token;
-    await api('/api/login', { method: 'POST', body: { token } });
-    showApp();
-  } catch (err) {
-    localStorage.removeItem('zsl_token');
-    S.token = '';
-    $('#login-msg').textContent = err.message || '登录失败';
-  } finally { busyBtn(btn, false); }
-});
-
-$('#logout').onclick = () => {
-  localStorage.removeItem('zsl_token');
-  S.token = '';
-  showLogin('已退出');
-};
 
 $('#refresh').onclick = (e) => guard(async () => { await loadData(); toast('已刷新'); }, e.currentTarget, '刷新');
 
@@ -897,30 +847,5 @@ window.addEventListener('hashchange', () => {
   if (TITLES[v] && v !== S.view) go(v);
 });
 
-/* 启动 */
-(async function boot() {
-  // 先探测服务端是否需要令牌：APP_AUTH=off 时直接进主界面
-  let meta = null;
-  try {
-    const r = await fetch('/api/session');
-    if (r.ok) meta = await r.json();
-  } catch (_) { /* 探测失败则按需登录处理 */ }
-
-  const logoutBtn = $('#logout');
-  if (meta && meta.auth === false) {
-    S.token = '';
-    localStorage.removeItem('zsl_token');
-    if (logoutBtn) logoutBtn.hidden = true;
-    showApp();
-    return;
-  }
-  if (logoutBtn) logoutBtn.hidden = false;
-
-  if (!S.token) { showLogin(); return; }
-  try {
-    await api('/api/health');
-    const res = await fetch('/api/scan', { headers: { 'X-API-Token': S.token } });
-    if (res.status === 401) { showLogin('令牌已失效'); return; }
-    showApp();
-  } catch (_) { showLogin(); }
-})();
+/* 无登录：脚本加载即进入主界面 */
+showApp();
