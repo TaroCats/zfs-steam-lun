@@ -19,3 +19,8 @@ venv/
 temp/
 output/
 .DS_Store
+
+# 推送通道私钥（仅存 NAS/本地，永不入库）
+.ssh/
+*.pem
+*_ed25519
