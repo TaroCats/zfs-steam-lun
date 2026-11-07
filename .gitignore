@@ -1,0 +1,21 @@
+# 运行期数据（含 CHAP 密文、令牌），绝不入库
+data/
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+token.txt
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+
+# 构建产物 / 临时文件
+*.tar.gz
+*.log
+temp/
+output/
+.DS_Store

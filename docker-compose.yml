@@ -1,0 +1,40 @@
+name: zfs-steam-lun
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    # 默认本地构建；想直接用 GitHub Actions 分发出来的镜像时：
+    #   ZSL_IMAGE=ghcr.io/tarocats/zfs-steam-lun:latest docker compose up -d
+    image: ${ZSL_IMAGE:-zfs-steam-lun:1.0.1}
+    container_name: zfs-steam-lun
+    restart: unless-stopped
+    # 需要进入宿主命名空间调用 zfs / targetcli，并直接操作内核 configfs
+    privileged: true
+    pid: host
+    network_mode: host
+    init: true
+    environment:
+      TZ: Asia/Shanghai
+      APP_PORT: "8890"
+      # 想固定令牌就取消下一行注释；不设则自动生成到 data/token.txt
+      # APP_TOKEN: "change-me-please"
+    volumes:
+      # LIO 内核配置接口（用于读取 LUN / ACL / 会话状态）
+      - /sys/kernel/config:/sys/kernel/config:rshared
+      # /dev/zfs 与 /dev/zvol/*
+      - /dev:/dev:rshared
+      # 应用数据（sqlite、token）
+      - ./data:/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8890/api/health', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

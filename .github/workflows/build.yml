@@ -1,0 +1,201 @@
+name: build
+
+# 矩阵构建多架构镜像并合并为多平台 manifest 分发：
+#   1. build 任务按 matrix 为每个平台独立构建（首次构建 QEMU 模拟，层缓存命中后很快）
+#   2. 每个平台以 digest 形式推送，互不覆盖
+#   3. merge 任务用 imagetools 把各平台 digest 合成一个多架构 tag
+# 触发规则：推 tag（v1.2.3）→ 语义化版本 + latest；推 main → edge + sha；PR → 只构建不推送
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*.*.*"]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      push_image:
+        description: "是否推送镜像"
+        type: boolean
+        default: true
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  IMAGE_NAME: ${{ github.repository }}
+  REGISTRY: ghcr.io
+
+jobs:
+  # ------------------------------------------------------------------ 平台矩阵
+  build:
+    name: build (${{ matrix.platform }})
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux/amd64
+            arch: amd64
+            qemu: false
+          - platform: linux/arm64
+            arch: arm64
+            qemu: true
+        # 若仓库可访问 GitHub 原生 arm64 runner（公开仓库免费），
+        # 可把上面 arm64 项改为 runner: ubuntu-24.04-arm 且 qemu: false 以获得更快构建。
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve push flag
+        id: flag
+        run: |
+          set -euo pipefail
+          P=false
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+              P="${{ inputs.push_image }}"
+            else
+              P=true
+            fi
+          fi
+          echo "push=${P}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up QEMU
+        if: matrix.qemu
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: ${{ matrix.platform }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Resolve image names
+        id: names
+        run: |
+          set -euo pipefail
+          NAMES="${REGISTRY}/${IMAGE_NAME}"
+          # 配置了 Docker Hub 凭据时同时分发到 Docker Hub
+          if [ -n "${{ secrets.DOCKERHUB_USERNAME }}" ]; then
+            NAMES="${NAMES},docker.io/${{ secrets.DOCKERHUB_USERNAME }}/$(basename "${IMAGE_NAME}")"
+          fi
+          echo "images=${NAMES}" >> "$GITHUB_OUTPUT"
+
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ steps.names.outputs.images }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}},enable=${{ !startsWith(github.ref_name, 'v0.') }}
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') && !contains(github.ref_name, '-') }}
+            type=edge,branch=main
+            type=sha,prefix=sha-,format=short
+
+      - name: Login to GHCR
+        if: steps.flag.outputs.push == 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Login to Docker Hub
+        if: steps.flag.outputs.push == 'true' && secrets.DOCKERHUB_USERNAME != ''
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push by digest
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: ${{ matrix.platform }}
+          labels: ${{ steps.meta.outputs.labels }}
+          # 只推 digest，最终 tag 由 merge 任务挂到多架构 manifest 上
+          outputs: type=image,name=${{ steps.names.outputs.images }},push-by-digest=true,name-canonical=true,push=${{ steps.flag.outputs.push }}
+          cache-from: type=gha,scope=${{ matrix.platform }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.platform }}
+          provenance: true
+          sbom: true
+
+      - name: Stash digest and tags
+        if: steps.flag.outputs.push == 'true'
+        run: |
+          set -euo pipefail
+          mkdir -p "${{ runner.temp }}/out"
+          echo "${{ steps.build.outputs.digest }}" > "${{ runner.temp }}/out/digest-${{ matrix.arch }}.txt"
+          echo "${{ steps.meta.outputs.tags }}" > "${{ runner.temp }}/out/tags-${{ matrix.arch }}.txt"
+
+      - name: Upload digest and tags
+        if: steps.flag.outputs.push == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: manifest-${{ matrix.arch }}
+          path: ${{ runner.temp }}/out/*
+          if-no-files-found: error
+          retention-days: 1
+
+  # ------------------------------------------------ 合并多架构 manifest 并打 tag
+  merge:
+    name: merge manifest
+    runs-on: ubuntu-24.04
+    needs: [build]
+    if: github.event_name != 'pull_request' && (github.event_name != 'workflow_dispatch' || inputs.push_image)
+    steps:
+      - name: Download digests
+        uses: actions/download-artifact@v4
+        with:
+          path: ${{ runner.temp }}/digests
+          pattern: manifest-*
+          merge-multiple: true
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Login to Docker Hub
+        if: secrets.DOCKERHUB_USERNAME != ''
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Create multi-arch manifest
+        working-directory: ${{ runner.temp }}/digests
+        run: |
+          set -euo pipefail
+          SOURCES=""
+          for f in digest-*.txt; do
+            d=$(cat "$f")
+            SOURCES="$SOURCES ${REGISTRY}/${IMAGE_NAME}@${d}"
+          done
+          echo "sources: $SOURCES"
+
+          TAGS=$(cat tags-*.txt | sed '/^$/d' | sort -u)
+          echo "tags:"; echo "$TAGS"
+
+          ARGS=""
+          while IFS= read -r t; do
+            [ -n "$t" ] && ARGS="$ARGS --tag $t"
+          done <<< "$TAGS"
+
+          docker buildx imagetools create $ARGS $SOURCES
+          echo "---"
+          docker buildx imagetools inspect "$(echo "$TAGS" | head -n1)"

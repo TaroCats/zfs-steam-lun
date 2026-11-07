@@ -1,0 +1,14 @@
+# 构建上下文排除项
+data/
+temp/
+output/
+.git/
+.github/
+__pycache__/
+*.py[cod]
+*.log
+*.tar.gz
+.venv/
+venv/
+.env
+.DS_Store
